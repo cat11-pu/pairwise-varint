@@ -1,0 +1,41 @@
+"""varint: a small variable length integer encoder, decoder and stream reader."""
+
+from .core import (
+    CONTINUATION,
+    FINAL_BYTE_MAX,
+    INT64_MAX,
+    INT64_MIN,
+    MAX_VARINT_BYTES,
+    PAYLOAD_MASK,
+    UINT64_MAX,
+    VarintError,
+    VarintReader,
+    decode_many,
+    decode_svarint,
+    decode_uvarint,
+    decode_uvarint_be,
+    encode_svarint,
+    encode_uvarint,
+    encode_uvarint_be,
+    encoded_size,
+)
+
+__all__ = [
+    "CONTINUATION",
+    "FINAL_BYTE_MAX",
+    "INT64_MAX",
+    "INT64_MIN",
+    "MAX_VARINT_BYTES",
+    "PAYLOAD_MASK",
+    "UINT64_MAX",
+    "VarintError",
+    "VarintReader",
+    "decode_many",
+    "decode_svarint",
+    "decode_uvarint",
+    "decode_uvarint_be",
+    "encode_svarint",
+    "encode_uvarint",
+    "encode_uvarint_be",
+    "encoded_size",
+]
