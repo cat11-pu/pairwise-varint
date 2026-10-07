@@ -90,20 +90,21 @@ def decode_uvarint(data, offset=0):
     while True:
         if pos >= len(data):
             raise VarintError("the varint needs more bytes", incomplete=True)
-        if pos - offset >= MAX_VARINT_BYTES:
-            raise VarintError(
-                "the varint is longer than %d bytes" % MAX_VARINT_BYTES
-            )
         byte = data[pos]
         pos += 1
-        if pos - offset == MAX_VARINT_BYTES and byte > PAYLOAD_MASK:
-            raise VarintError("the varint does not fit 64 bits")
+        if pos - offset == MAX_VARINT_BYTES:
+            if byte & CONTINUATION:
+                raise VarintError(
+                    "the varint is longer than %d bytes" % MAX_VARINT_BYTES
+                )
+            if byte > FINAL_BYTE_MAX:
+                raise VarintError("the varint does not fit 64 bits")
         value |= (byte & PAYLOAD_MASK) << shift
         if not byte & CONTINUATION:
-            if pos - offset > 1 and not value:
+            if pos - offset > 1 and not byte & PAYLOAD_MASK:
                 raise VarintError("the varint is not the shortest form")
             return value, pos - offset
-        shift += 8
+        shift += 7
 
 
 def encode_svarint(value):
@@ -118,7 +119,7 @@ def encode_svarint(value):
 def decode_svarint(data, offset=0):
     """Decode the zigzag varint at offset, returning (value, size)."""
     raw, size = decode_uvarint(data, offset)
-    return (raw >> 1) ^ (raw & 1), size
+    return (raw >> 1) ^ -(raw & 1), size
 
 
 # ---------------------------------------------------------------------------
@@ -136,11 +137,9 @@ def encode_uvarint_be(value):
             break
     groups.reverse()
     chunk = bytearray()
-    for index, group in enumerate(groups):
-        if index:
-            chunk.append(group | CONTINUATION)
-        else:
-            chunk.append(group)
+    for group in groups[:-1]:
+        chunk.append(group | CONTINUATION)
+    chunk.append(groups[-1])
     return bytes(chunk)
 
 
@@ -153,13 +152,13 @@ def decode_uvarint_be(data, offset=0):
     while True:
         if pos >= len(data):
             raise VarintError("the varint needs more bytes", incomplete=True)
-        if pos - offset >= MAX_VARINT_BYTES:
-            raise VarintError(
-                "the varint is longer than %d bytes" % MAX_VARINT_BYTES
-            )
         byte = data[pos]
         pos += 1
         groups.append(byte & PAYLOAD_MASK)
+        if len(groups) == MAX_VARINT_BYTES and byte & CONTINUATION:
+            raise VarintError(
+                "the varint is longer than %d bytes" % MAX_VARINT_BYTES
+            )
         if not byte & CONTINUATION:
             break
     if len(groups) == MAX_VARINT_BYTES and groups[0] > FINAL_BYTE_MAX:
@@ -179,7 +178,7 @@ def decode_uvarint_be(data, offset=0):
 def encoded_size(value):
     """Number of bytes the little endian encoding of value occupies."""
     _check_unsigned(value)
-    return value.bit_length() // 7 + 1
+    return (value.bit_length() + 6) // 7 or 1
 
 
 def decode_many(data):
@@ -191,10 +190,7 @@ def decode_many(data):
     values = []
     offset = 0
     while offset < len(data):
-        try:
-            value, size = decode_uvarint(data, offset)
-        except VarintError:
-            break
+        value, size = decode_uvarint(data, offset)
         values.append(value)
         offset += size
     return values
@@ -234,7 +230,6 @@ class VarintReader:
             value, size = decode_uvarint(bytes(self._buffer))
         except VarintError as error:
             if error.incomplete:
-                del self._buffer[:]
                 return None
             raise
         del self._buffer[:size]
